@@ -1,12 +1,22 @@
-name = "scs-blog-worker"
-main = "src/entry.py"
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "scs-blog-worker",
+  "main": "src/entry.py",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": [
+    "python_workers"
+  ],
 
-compatibility_date = "2026-08-25"
-compatibility_flags = ["python_workers"]
+  "kv_namespaces": [
+    {
+      "binding": "KV_BINDING",
+      "id": "323722b1e59942e4bbd617de59b4f91b"
+    }
+  ],
 
-[triggers]
-crons = ["*/5 * * * *"]
-
-[[kv_namespaces]]
-binding = "KV_BINDING"
-id = "323722b1e59942e4bbd617de59b4f91b"
+  "triggers": {
+    "crons": [
+      "*/10 * * * *"
+    ]
+  }
+}
