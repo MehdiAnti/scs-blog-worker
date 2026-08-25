@@ -210,7 +210,7 @@ class Default(WorkerEntrypoint):
         try:
 
             result = await run_check(
-                env
+                self.env
             )
 
             print(
