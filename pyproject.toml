@@ -1,7 +1,7 @@
 [project]
 name = "scs-blog-worker"
 version = "1.0.0"
-description = "SCS Software Blog Telegram Worker"
+description = "SCS Blog Telegram Worker"
 requires-python = ">=3.13"
 
 dependencies = [
