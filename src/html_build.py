@@ -104,7 +104,6 @@ def _create_inline_button(
     soup,
     text,
     url,
-    style="primary",
 ):
 
     button = soup.new_tag(
@@ -112,7 +111,6 @@ def _create_inline_button(
     )
 
     button["type"] = "url"
-    button["style"] = style
     button["url"] = url
 
     button.string = text
@@ -295,7 +293,6 @@ def _cleanup_images_and_links(soup):
             soup,
             text,
             href,
-            style="link",
         )
 
         link.replace_with(
