@@ -26,7 +26,6 @@ SUPPORTED_TAGS = {
     "h5",
     "h6",
     "p",
-    "a",
     "b",
     "strong",
     "i",
@@ -100,6 +99,26 @@ def _create_button(
     return row
 
 
+def _create_inline_button(
+    soup,
+    text,
+    url,
+    style="primary",
+):
+
+    button = soup.new_tag(
+        "tg-button"
+    )
+
+    button["type"] = "url"
+    button["style"] = style
+    button["url"] = url
+
+    button.string = text
+
+    return button
+
+
 def _convert_iframes(soup):
 
     for iframe in soup.find_all("iframe"):
@@ -162,15 +181,17 @@ def _convert_iframes(soup):
             name = STORE_IDS.get(
                 app_id
             )
-            
+
             if name:
+
                 button_text = (
                     f"View {name} in Store"
                 )
-            
+
             else:
+
                 button_text = "View Store"
-                
+
             button = _create_button(
                 soup,
                 button_text,
@@ -242,13 +263,17 @@ def _cleanup_images_and_links(soup):
             )
 
     for link in soup.find_all("a"):
-        
-        if link.find("tg-button-row"):
-            link.unwrap()
 
-        if not link.get_text(
+        href = link.get(
+            "href",
+            "",
+        )
+
+        text = link.get_text(
             strip=True
-        ):
+        )
+
+        if not text:
 
             if link.find("img"):
 
@@ -257,6 +282,24 @@ def _cleanup_images_and_links(soup):
             else:
 
                 link.decompose()
+
+            continue
+
+        if not href:
+
+            link.unwrap()
+            continue
+
+        button = _create_inline_button(
+            soup,
+            text,
+            href,
+            style="primary",
+        )
+
+        link.replace_with(
+            button
+        )
 
     for paragraph in soup.find_all("p"):
 
