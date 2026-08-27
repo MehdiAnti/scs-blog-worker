@@ -145,11 +145,23 @@ async def cmd_rich(
             article_html
         )
 
-        await send_message(
-            env,
-            chat_id,
-            f"<pre>{debug_html}</pre>",
-        )
+        chunk_size = 4000
+
+        for i in range(
+            0,
+            len(debug_html),
+            chunk_size,
+        ):
+
+            chunk = debug_html[
+                i:i + chunk_size
+            ]
+
+            await send_message(
+                env,
+                chat_id,
+                f"<pre>{chunk}</pre>",
+            )
 
     except Exception as e:
 
