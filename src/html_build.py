@@ -257,9 +257,22 @@ def _cleanup_images_and_links(soup):
                 style="primary",
             )
 
-            img.replace_with(
-                button
-            )
+            parent = img.parent
+
+            if (
+                parent
+                and parent.name == "a"
+            ):
+
+                parent.replace_with(
+                    button
+                )
+
+            else:
+
+                img.replace_with(
+                    button
+                )
 
     for link in soup.find_all("a"):
 
