@@ -127,11 +127,9 @@ def _convert_iframes(soup):
                     f"{match.group(1)}"
                 )
 
-            text = "▶️ View Video"
-
             button = _create_button(
                 soup,
-                text,
+                "▶️ View Video",
                 src,
                 style="primary",
             )
@@ -226,6 +224,9 @@ def _cleanup_images_and_links(soup):
             )
 
     for link in soup.find_all("a"):
+        
+        if link.find("tg-button-row"):
+            link.unwrap()
 
         if not link.get_text(
             strip=True
@@ -320,14 +321,7 @@ def _strip_attributes(soup):
 
         elif tag.name == "tg-button-row":
 
-            align = tag.get(
-                "align"
-            )
-
             tag.attrs = {}
-
-            if align:
-                tag["align"] = align
 
         else:
 
