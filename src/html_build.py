@@ -104,7 +104,7 @@ def _create_inline_button(
     soup,
     text,
     url,
-    style="primary",
+    style="link",
 ):
 
     button = soup.new_tag(
