@@ -26,6 +26,7 @@ SUPPORTED_TAGS = {
     "h5",
     "h6",
     "p",
+    "a",
     "b",
     "strong",
     "i",
