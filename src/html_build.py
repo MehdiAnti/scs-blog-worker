@@ -91,8 +91,6 @@ def _create_button(
         "tg-button-row"
     )
 
-    row["align"] = "center"
-
     row.append(button)
 
     return row
