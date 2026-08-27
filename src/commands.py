@@ -1,3 +1,5 @@
+import html
+
 from config import (
     get_allowed_user,
 )
@@ -11,6 +13,14 @@ from storage import (
 from telegram import (
     send_message,
     send_article,
+)
+
+from blogger import (
+    fetch_article,
+)
+
+from html_build import (
+    clean_article,
 )
 
 from checker import (
@@ -34,6 +44,7 @@ async def cmd_start(
             "/last - Last stored article\n"
             "/status - Bot status\n"
             "/checknow - Check immediately\n"
+            "/rich URL - Debug cleaned HTML\n"
             "/preview URL - Preview article\n"
             "/publish URL - Publish article"
         ),
@@ -95,6 +106,58 @@ async def cmd_status(
         chat_id,
         text,
     )
+
+
+async def cmd_rich(
+    env,
+    chat_id,
+    text,
+):
+
+    parts = text.split(
+        " ",
+        1,
+    )
+
+    if len(parts) != 2:
+
+        await send_message(
+            env,
+            chat_id,
+            "Usage:\n/rich ARTICLE_URL",
+        )
+
+        return
+
+    article_url = parts[1].strip()
+
+    try:
+
+        article = await fetch_article(
+            article_url
+        )
+
+        article_html = clean_article(
+            article["html"]
+        )
+
+        debug_html = html.escape(
+            article_html
+        )
+
+        await send_message(
+            env,
+            chat_id,
+            f"<pre>{debug_html}</pre>",
+        )
+
+    except Exception as e:
+
+        await send_message(
+            env,
+            chat_id,
+            f"❌ {e}",
+        )
 
 
 async def cmd_preview(
@@ -248,6 +311,16 @@ async def handle_command(
         await cmd_checknow(
             env,
             chat_id,
+        )
+
+    elif text.startswith(
+        "/rich "
+    ):
+
+        await cmd_rich(
+            env,
+            chat_id,
+            text,
         )
 
     elif text.startswith(
