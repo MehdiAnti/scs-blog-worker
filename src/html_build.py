@@ -129,7 +129,7 @@ def _convert_iframes(soup):
 
             button = _create_button(
                 soup,
-                "▶️ View Video",
+                "View Video",
                 src,
                 style="primary",
             )
@@ -155,7 +155,7 @@ def _convert_iframes(soup):
 
             button = _create_button(
                 soup,
-                "🛒 View Store",
+                "View Store",
                 src,
                 style="success",
             )
@@ -214,7 +214,7 @@ def _cleanup_images_and_links(soup):
 
             button = _create_button(
                 soup,
-                "🎞 View Animation",
+                "View Animation",
                 src,
                 style="primary",
             )
