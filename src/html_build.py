@@ -38,6 +38,8 @@ SUPPORTED_TAGS = {
     "li",
     "br",
     "img",
+    "tg-button",
+    "tg-button-row",
 }
 
 
@@ -68,6 +70,34 @@ def _remove_unwanted_blocks(soup):
     return soup
 
 
+def _create_button(
+    soup,
+    text,
+    url,
+    style="primary",
+):
+
+    button = soup.new_tag(
+        "tg-button"
+    )
+
+    button["type"] = "url"
+    button["style"] = style
+    button["url"] = url
+
+    button.string = text
+
+    row = soup.new_tag(
+        "tg-button-row"
+    )
+
+    row["align"] = "center"
+
+    row.append(button)
+
+    return row
+
+
 def _convert_iframes(soup):
 
     for iframe in soup.find_all("iframe"):
@@ -81,23 +111,32 @@ def _convert_iframes(soup):
             iframe.decompose()
             continue
 
-        if "youtube.com" in src:
+        if (
+            "youtube.com" in src
+            or
+            "youtu.be" in src
+        ):
 
             match = re.search(
                 r"youtube\.com/embed/([^?&/]+)",
                 src,
             )
 
-            if not match:
-                iframe.decompose()
-                continue
+            if match:
 
-            src = (
-                "https://youtu.be/"
-                f"{match.group(1)}"
+                src = (
+                    "https://youtu.be/"
+                    f"{match.group(1)}"
+                )
+
+            text = "▶️ View Video"
+
+            button = _create_button(
+                soup,
+                text,
+                src,
+                style="primary",
             )
-
-            text = "🎥 Watch Video"
 
         elif (
             "store.steampowered.com/widget/"
@@ -118,31 +157,20 @@ def _convert_iframes(soup):
                 f"{appid.group(1)}/"
             )
 
-            text = "🎮 Steam Store"
+            button = _create_button(
+                soup,
+                "🛒 View Store",
+                src,
+                style="success",
+            )
 
         else:
 
             iframe.decompose()
             continue
 
-        link = soup.new_tag(
-            "a",
-            href=src,
-        )
-
-        link.string = text
-
-        paragraph = soup.new_tag(
-            "p"
-        )
-
-        br = soup.new_tag("br")
-
-        paragraph.append(br)
-        paragraph.append(link)
-
         iframe.replace_with(
-            paragraph
+            button
         )
 
     return soup
@@ -188,26 +216,15 @@ def _cleanup_images_and_links(soup):
 
         if ".gif" in src.lower():
 
-            link = soup.new_tag(
-                "a",
-                href=src,
+            button = _create_button(
+                soup,
+                "🎞 View Animation",
+                src,
+                style="primary",
             )
-
-            link.string = (
-                "🎞 View Animation"
-            )
-
-            paragraph = soup.new_tag(
-                "p"
-            )
-
-            br = soup.new_tag("br")
-
-            paragraph.append(br)
-            paragraph.append(link)
 
             img.replace_with(
-                paragraph
+                button
             )
 
     for link in soup.find_all("a"):
@@ -231,6 +248,9 @@ def _cleanup_images_and_links(soup):
                 strip=True
             )
             and not paragraph.find("img")
+            and not paragraph.find(
+                "tg-button"
+            )
         ):
 
             paragraph.decompose()
@@ -274,6 +294,42 @@ def _strip_attributes(soup):
 
             if src:
                 tag["src"] = src
+
+        elif tag.name == "tg-button":
+
+            button_type = tag.get(
+                "type"
+            )
+
+            style = tag.get(
+                "style"
+            )
+
+            url = tag.get(
+                "url"
+            )
+
+            tag.attrs = {}
+
+            if button_type:
+                tag["type"] = button_type
+
+            if style:
+                tag["style"] = style
+
+            if url:
+                tag["url"] = url
+
+        elif tag.name == "tg-button-row":
+
+            align = tag.get(
+                "align"
+            )
+
+            tag.attrs = {}
+
+            if align:
+                tag["align"] = align
 
         else:
 
