@@ -2,6 +2,10 @@ import re
 
 from bs4 import BeautifulSoup
 
+from store_ids import (
+    STORE_IDS,
+)
+
 
 REMOVE_TEXTS = [
     "Email This",
@@ -148,14 +152,28 @@ def _convert_iframes(soup):
                 iframe.decompose()
                 continue
 
+            app_id = appid.group(1)
+
             src = (
                 "https://store.steampowered.com/app/"
-                f"{appid.group(1)}/"
+                f"{app_id}/"
             )
 
+            name = STORE_IDS.get(
+                app_id
+            )
+            
+            if name:
+                button_text = (
+                    f"View {name} in Store"
+                )
+            
+            else:
+                button_text = "View Store"
+                
             button = _create_button(
                 soup,
-                "View Store",
+                button_text,
                 src,
                 style="success",
             )
