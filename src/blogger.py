@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 import httpx
@@ -18,22 +19,90 @@ HEADERS = {
 
 
 async def _get(url):
-    async with httpx.AsyncClient(
-        headers=HEADERS,
-        follow_redirects=True,
-        timeout=30.0,
-    ) as client:
 
-        response = await client.get(url)
+    for attempt in range(3):
 
-        response.raise_for_status()
+        try:
 
-        return response.text
+            async with httpx.AsyncClient(
+                headers=HEADERS,
+                follow_redirects=True,
+                timeout=30.0,
+            ) as client:
+
+                response = await client.get(url)
+
+            if response.status_code == 503:
+
+                if attempt < 2:
+
+                    wait_time = 3 * (
+                        attempt + 1
+                    )
+
+                    print(
+                        f"HTTP 503 for {url} "
+                        f"- retrying in "
+                        f"{wait_time}s "
+                        f"({attempt + 1}/2)"
+                    )
+
+                    await asyncio.sleep(
+                        wait_time
+                    )
+
+                    continue
+
+                print(
+                    f"HTTP 503 for {url} "
+                    f"- giving up"
+                )
+
+                return None
+
+            response.raise_for_status()
+
+            return response.text
+
+        except httpx.HTTPError as e:
+
+            if attempt < 2:
+
+                wait_time = 3 * (
+                    attempt + 1
+                )
+
+                print(
+                    f"HTTP error for {url}: "
+                    f"{e} - retrying in "
+                    f"{wait_time}s "
+                    f"({attempt + 1}/2)"
+                )
+
+                await asyncio.sleep(
+                    wait_time
+                )
+
+                continue
+
+            print(
+                f"HTTP request failed for "
+                f"{url}: {e}"
+            )
+
+            return None
+
+    return None
 
 
 async def _get_latest_post_homepage():
 
     html = await _get(BLOG_URL)
+
+    if html is None:
+        raise Exception(
+            "Homepage unavailable"
+        )
 
     soup = BeautifulSoup(
         html,
@@ -60,6 +129,11 @@ async def _get_latest_post_rss():
     """
 
     html = await _get(RSS_URL)
+
+    if html is None:
+        raise Exception(
+            "RSS feed unavailable"
+        )
 
     soup = BeautifulSoup(
         html,
@@ -188,6 +262,11 @@ def _get_teaser(text, limit=400):
 async def fetch_article(url):
 
     html = await _get(url)
+
+    if html is None:
+        raise Exception(
+            f"Article unavailable: {url}"
+        )
 
     soup = BeautifulSoup(
         html,
