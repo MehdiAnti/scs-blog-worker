@@ -1,5 +1,7 @@
 import re
 
+from urllib.parse import urlparse
+
 from bs4 import BeautifulSoup
 
 from store_ids import (
@@ -47,6 +49,71 @@ SUPPORTED_TAGS = {
 }
 
 
+def _normalize_url(url):
+
+    if not url:
+        return None
+
+    url = url.strip()
+
+    if re.match(
+        r"^https?://@",
+        url,
+        re.IGNORECASE,
+    ):
+
+        url = re.sub(
+            r"^https?://@",
+            "https://",
+            url,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    return url
+
+
+def _is_safe_url(url):
+
+    if not url:
+        return False
+
+    try:
+
+        parsed = urlparse(url)
+
+    except Exception:
+
+        return False
+
+    if parsed.scheme not in (
+        "http",
+        "https",
+    ):
+
+        return False
+
+    if not parsed.netloc:
+        return False
+
+    
+    if "@" in parsed.netloc:
+        return False
+
+    try:
+
+        hostname = parsed.hostname
+
+    except ValueError:
+
+        return False
+
+    if not hostname:
+        return False
+
+    return True
+
+
 def _remove_unwanted_blocks(soup):
 
     for text in REMOVE_TEXTS:
@@ -81,6 +148,16 @@ def _create_button(
     style="primary",
 ):
 
+    url = _normalize_url(url)
+
+    if not _is_safe_url(url):
+
+        print(
+            f"WARNING: Invalid button URL skipped: {url}"
+        )
+
+        return None
+
     button = soup.new_tag(
         "tg-button"
     )
@@ -106,6 +183,16 @@ def _create_inline_button(
     url,
 ):
 
+    url = _normalize_url(url)
+
+    if not _is_safe_url(url):
+
+        print(
+            f"WARNING: Invalid inline URL skipped: {url}"
+        )
+
+        return None
+
     button = soup.new_tag(
         "tg-button"
     )
@@ -116,7 +203,6 @@ def _create_inline_button(
     button.string = text
 
     return button
-
 
 def _convert_iframes(soup):
 
