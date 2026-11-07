@@ -23,22 +23,30 @@ from config import (
 )
 
 
+def _utc_now():
+
+    return datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
+
+
 async def run_check(env):
 
     status = await get_status(
         env
     )
 
+    status["last_check"] = _utc_now()
+
     try:
 
         latest = await get_latest_post()
 
-        status["last_check"] = (
-            datetime.now(
-                timezone.utc
-            ).strftime(
-                "%Y-%m-%d %H:%M:%S UTC"
-            )
+        print(
+            f"Latest article: {latest['title']} | "
+            f"{latest['url']}"
         )
 
         if not await article_is_new(
@@ -58,33 +66,40 @@ async def run_check(env):
             )
 
             return {
-                "status":
-                    "no_new_article",
+                "status": "no_new_article",
             }
+
+        async def mark_article_ready(article):
+
+            await save_detected(
+                env,
+                article["url"],
+                article["title"],
+            )
+
+            print(
+                f"Article marked as detected: "
+                f"{article['url']}"
+            )
 
         article = await send_article(
             env,
             get_allowed_user(env),
             latest["url"],
             publish_channel=True,
-        )
-
-        # Only save AFTER all Telegram
-        # publishing succeeded.
-
-        await save_detected(
-            env,
-            article["url"],
-            article["title"],
+            on_article_ready=mark_article_ready,
         )
 
         status["last_result"] = "posted"
+
         status["latest_title"] = (
             article["title"]
         )
+
         status["latest_url"] = (
             article["url"]
         )
+
         status["last_error"] = ""
 
         await save_status(
@@ -101,6 +116,7 @@ async def run_check(env):
     except Exception as e:
 
         status["last_result"] = "failed"
+
         status["last_error"] = str(e)
 
         try:
@@ -114,7 +130,12 @@ async def run_check(env):
 
             print(
                 "Failed to save status:",
-                status_error,
+                str(status_error),
             )
+
+        print(
+            "Check failed:",
+            str(e),
+        )
 
         raise

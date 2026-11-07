@@ -1,8 +1,5 @@
 import html
-
-from config import (
-    get_allowed_user,
-)
+import time
 
 from storage import (
     get_last_article,
@@ -17,15 +14,24 @@ from telegram import (
 
 from blogger import (
     fetch_article,
+    probe_image,
 )
 
 from html_build import (
     clean_article,
+    build_rich_article,
 )
 
 from checker import (
     run_check,
 )
+
+
+def _safe(value):
+
+    return html.escape(
+        str(value or "")
+    )
 
 
 async def cmd_start(
@@ -38,13 +44,11 @@ async def cmd_start(
         chat_id,
         (
             "<b>SCS Blog Telegram Bot</b>\n\n"
-
             "<b>Commands</b>\n"
-
             "/last - Last stored article\n"
             "/status - Bot status\n"
             "/checknow - Check immediately\n"
-            "/rich URL - Debug cleaned HTML\n"
+            "/rich URL - Rich article debug\n"
             "/preview URL - Preview article\n"
             "/publish URL - Publish article"
         ),
@@ -61,11 +65,10 @@ async def cmd_last(
     )
 
     text = (
-        f"Title:\n"
-        f"{article.get('title', '')}\n\n"
-
-        f"URL:\n"
-        f"{article.get('url', '')}"
+        f"<b>Title:</b>\n"
+        f"{_safe(article.get('title'))}\n\n"
+        f"<b>URL:</b>\n"
+        f"{_safe(article.get('url'))}"
     )
 
     await send_message(
@@ -86,19 +89,15 @@ async def cmd_status(
 
     text = (
         "<b>📊 Bot Status</b>\n\n"
-
         f"<b>Last Result:</b> "
-        f"{status['last_result']}\n"
-
+        f"{_safe(status['last_result'])}\n"
         f"<b>Last Check:</b> "
-        f"{status['last_check']}\n\n"
-
+        f"{_safe(status['last_check'])}\n\n"
         f"<b>Latest Article:</b>\n"
-        f"{status['latest_title']}\n"
-        f"{status['latest_url']}\n\n"
-
+        f"{_safe(status['latest_title'])}\n"
+        f"{_safe(status['latest_url'])}\n\n"
         f"<b>Last Error:</b>\n"
-        f"{status['last_error'] or 'None'}"
+        f"{_safe(status['last_error'] or 'None')}"
     )
 
     await send_message(
@@ -131,44 +130,162 @@ async def cmd_rich(
 
     article_url = parts[1].strip()
 
+    started = time.perf_counter()
+
     try:
 
         article = await fetch_article(
             article_url
         )
 
-        article_html = clean_article(
-            article["html"]
+        fetch_duration = (
+            time.perf_counter()
+            - started
         )
 
-        debug_html = html.escape(
+        image_result = await probe_image(
+            article["hero_image"]
+        )
+
+        clean_started = time.perf_counter()
+
+        article_html = clean_article(
+            article["html"],
+            article["url"],
+        )
+
+        clean_duration = (
+            time.perf_counter()
+            - clean_started
+        )
+
+        rich_started = time.perf_counter()
+
+        rich_html = build_rich_article(
             article_html
         )
 
-        chunk_size = 4000
+        rich_duration = (
+            time.perf_counter()
+            - rich_started
+        )
 
-        for i in range(
-            0,
-            len(debug_html),
-            chunk_size,
-        ):
+        total_duration = (
+            time.perf_counter()
+            - started
+        )
 
-            chunk = debug_html[
-                i:i + chunk_size
-            ]
+        image_error = (
+            image_result.get("error")
+            or "None"
+        )
 
-            await send_message(
-                env,
-                chat_id,
-                f"<pre>{chunk}</pre>",
-            )
+        final_url = image_result.get(
+            "final_url",
+            article["hero_image"] or "",
+        )
 
-    except Exception as e:
+        debug_info = (
+            "<b>🔬 Rich Debug Report</b>\n\n"
+
+            f"<b>Title:</b>\n"
+            f"{_safe(article['title'])}\n\n"
+
+            f"<b>Article URL:</b>\n"
+            f"{_safe(article['url'])}\n\n"
+
+            "<b>HTML Information</b>\n"
+            f"Original HTML: "
+            f"{article.get('original_html_length', 0)} chars\n"
+            f"HTML elements: "
+            f"{article.get('element_count', 0)}\n"
+            f"Cleaned HTML: "
+            f"{len(article_html)} chars\n"
+            f"Rich HTML: "
+            f"{len(rich_html)} chars\n\n"
+
+            "<b>Image Information</b>\n"
+            f"Hero URL:\n"
+            f"{_safe(article['hero_image'])}\n\n"
+            f"Final URL:\n"
+            f"{_safe(final_url)}\n"
+            f"HTTP status: "
+            f"{_safe(image_result.get('status'))}\n"
+            f"Content-Type: "
+            f"{_safe(image_result.get('content_type'))}\n"
+            f"Content-Length: "
+            f"{_safe(image_result.get('size'))}\n"
+            f"Image error: "
+            f"{_safe(image_error)}\n\n"
+
+            "<b>Processing Time</b>\n"
+            f"Article fetch: "
+            f"{fetch_duration:.3f}s\n"
+            f"HTML cleaning: "
+            f"{clean_duration:.3f}s\n"
+            f"Rich generation: "
+            f"{rich_duration:.3f}s\n"
+            f"Total: "
+            f"{total_duration:.3f}s"
+        )
 
         await send_message(
             env,
             chat_id,
-            f"❌ {e}",
+            debug_info,
+        )
+
+        await send_message(
+            env,
+            chat_id,
+            "<b>Generated Rich HTML</b>",
+        )
+
+        chunk_size = 3000
+
+        for i in range(
+            0,
+            len(article_html),
+            chunk_size,
+        ):
+
+            chunk = article_html[
+                i:i + chunk_size
+            ]
+
+            escaped_chunk = html.escape(
+                chunk
+            )
+
+            await send_message(
+                env,
+                chat_id,
+                f"<pre>{escaped_chunk}</pre>",
+            )
+
+        await send_message(
+            env,
+            chat_id,
+            (
+                "<b>Rich Debug Completed</b>\n"
+                "No article was published."
+            ),
+        )
+
+    except Exception as e:
+
+        print(
+            "Rich debug failed:",
+            str(e),
+        )
+
+        await send_message(
+            env,
+            chat_id,
+            (
+                "❌ <b>Rich Debug Failed</b>\n\n"
+                f"<code>{_safe(e)}</code>"
+            ),
         )
 
 
@@ -244,7 +361,7 @@ async def cmd_publish(
         chat_id,
         (
             "✅ Published.\n\n"
-            f"{article['title']}"
+            f"{_safe(article['title'])}"
         ),
     )
 
@@ -278,7 +395,7 @@ async def cmd_checknow(
             chat_id,
             (
                 "✅ Published successfully.\n\n"
-                f"{result['title']}"
+                f"{_safe(result['title'])}"
             ),
         )
 
@@ -287,7 +404,10 @@ async def cmd_checknow(
         await send_message(
             env,
             chat_id,
-            f"❌ {e}",
+            (
+                "❌ <b>Check failed</b>\n\n"
+                f"<code>{_safe(e)}</code>"
+            ),
         )
 
 
@@ -325,9 +445,7 @@ async def handle_command(
             chat_id,
         )
 
-    elif text.startswith(
-        "/rich "
-    ):
+    elif text.startswith("/rich "):
 
         await cmd_rich(
             env,
@@ -335,9 +453,7 @@ async def handle_command(
             text,
         )
 
-    elif text.startswith(
-        "/preview "
-    ):
+    elif text.startswith("/preview "):
 
         await cmd_preview(
             env,
@@ -345,9 +461,7 @@ async def handle_command(
             text,
         )
 
-    elif text.startswith(
-        "/publish "
-    ):
+    elif text.startswith("/publish "):
 
         await cmd_publish(
             env,

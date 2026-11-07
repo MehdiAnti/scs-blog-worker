@@ -1,4 +1,5 @@
 import json
+import time
 
 from workers import (
     WorkerEntrypoint,
@@ -18,6 +19,9 @@ from config import (
 )
 
 
+UPDATE_TTL = 604800
+
+
 class Default(WorkerEntrypoint):
 
     async def fetch(
@@ -31,8 +35,6 @@ class Default(WorkerEntrypoint):
 
         method = request.method
 
-        # Health
-
         if (
             method == "GET"
             and url.endswith("/")
@@ -42,8 +44,6 @@ class Default(WorkerEntrypoint):
                 "OK",
                 status=200,
             )
-
-        # Health endpoint
 
         if (
             method == "GET"
@@ -57,8 +57,6 @@ class Default(WorkerEntrypoint):
                         "scs-blog-worker",
                 }
             )
-
-        # Manual check
 
         if (
             method == "GET"
@@ -78,14 +76,17 @@ class Default(WorkerEntrypoint):
 
             except Exception as e:
 
+                print(
+                    "Manual check failed:",
+                    str(e),
+                )
+
                 return Response.json(
                     {
                         "error": str(e),
                     },
                     status=500,
                 )
-
-        # Telegram webhook
 
         if (
             method == "POST"
@@ -106,19 +107,60 @@ class Default(WorkerEntrypoint):
         request,
     ):
 
+        started = time.perf_counter()
+
         try:
 
-            update = (
-                await request.json()
-            )
+            update = await request.json()
 
-        except Exception:
+        except Exception as e:
+
+            print(
+                "Invalid webhook JSON:",
+                str(e),
+            )
 
             return Response.json(
                 {
                     "ok": True,
                 }
             )
+
+        update_id = update.get(
+            "update_id"
+        )
+
+        if update_id is not None:
+
+            update_key = (
+                f"telegram_update_{update_id}"
+            )
+
+            try:
+
+                existing = await self.env.KV_BINDING.get(
+                    update_key
+                )
+
+                if existing:
+
+                    print(
+                        f"Duplicate update ignored: {update_id}"
+                    )
+
+                    return Response.json(
+                        {
+                            "ok": True,
+                            "duplicate": True,
+                        }
+                    )
+
+            except Exception as e:
+
+                print(
+                    "Update deduplication read failed:",
+                    str(e),
+                )
 
         message = (
             update.get("message")
@@ -176,18 +218,46 @@ class Default(WorkerEntrypoint):
 
         try:
 
+            print(
+                f"Webhook command started | "
+                f"Update={update_id} | "
+                f"Command={text.split()[0]}"
+            )
+
             await handle_command(
                 self.env,
                 chat_id,
                 text,
             )
 
+            if update_id is not None:
+
+                await self.env.KV_BINDING.put(
+                    update_key,
+                    "1",
+                    expiration_ttl=UPDATE_TTL,
+                )
+
+            elapsed = (
+                time.perf_counter()
+                - started
+            )
+
+            print(
+                f"Webhook command completed | "
+                f"Update={update_id} | "
+                f"Duration={elapsed:.3f}s"
+            )
+
         except Exception as e:
 
             print(
-                "Command error:",
-                e,
+                f"Webhook command failed | "
+                f"Update={update_id} | "
+                f"Error={str(e)}"
             )
+
+            raise
 
         return Response.json(
             {
@@ -207,25 +277,29 @@ class Default(WorkerEntrypoint):
             f"{controller.cron}"
         )
 
+        started = time.perf_counter()
+
         try:
 
             result = await run_check(
                 self.env
             )
 
+            elapsed = (
+                time.perf_counter()
+                - started
+            )
+
             print(
-                "Cron result:",
-                result,
+                f"Cron result: {result} | "
+                f"Duration={elapsed:.3f}s"
             )
 
         except Exception as e:
 
             print(
                 "Cron failed:",
-                e,
+                str(e),
             )
-
-            # Re-raise so the scheduled
-            # invocation is recorded as failed.
 
             raise
