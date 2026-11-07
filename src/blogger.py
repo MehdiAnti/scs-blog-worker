@@ -1,7 +1,10 @@
 import asyncio
 import re
+import time
 
 import httpx
+
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 from email.utils import parsedate_to_datetime
@@ -95,6 +98,93 @@ async def _get(url):
     return None
 
 
+async def probe_image(url):
+
+    if not url:
+        return {
+            "url": "",
+            "status": None,
+            "content_type": "",
+            "size": None,
+            "error": "No image URL",
+        }
+
+    result = {
+        "url": url,
+        "status": None,
+        "content_type": "",
+        "size": None,
+        "error": "",
+    }
+
+    try:
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=20.0,
+            headers=HEADERS,
+        ) as client:
+
+            response = await client.head(
+                url
+            )
+
+            if response.status_code in (
+                405,
+                403,
+            ):
+
+                response = await client.get(
+                    url,
+                    headers={
+                        **HEADERS,
+                        "Range": "bytes=0-0",
+                    },
+                )
+
+        result["status"] = (
+            response.status_code
+        )
+
+        result["content_type"] = (
+            response.headers.get(
+                "content-type",
+                "",
+            )
+        )
+
+        result["size"] = (
+            response.headers.get(
+                "content-length",
+                "",
+            )
+        )
+
+        result["final_url"] = str(
+            response.url
+        )
+
+        if not response.is_success:
+
+            result["error"] = (
+                f"HTTP {response.status_code}"
+            )
+
+        elif not result["content_type"].lower().startswith(
+            "image/"
+        ):
+
+            result["error"] = (
+                "URL does not return an image"
+            )
+
+    except Exception as e:
+
+        result["error"] = str(e)
+
+    return result
+
+
 async def _get_latest_post_homepage():
 
     html = await _get(BLOG_URL)
@@ -118,7 +208,10 @@ async def _get_latest_post_homepage():
 
     return {
         "title": post.get_text(strip=True),
-        "url": post.get("href", ""),
+        "url": urljoin(
+            BLOG_URL,
+            post.get("href", ""),
+        ),
         "date": "",
     }
 
@@ -139,8 +232,6 @@ async def _get_latest_post_rss():
         html,
         "xml",
     )
-
-    # Atom
 
     entry = soup.find("entry")
 
@@ -177,11 +268,12 @@ async def _get_latest_post_rss():
 
         return {
             "title": title,
-            "url": url,
+            "url": urljoin(
+                BLOG_URL,
+                url,
+            ),
             "date": pub_date,
         }
-
-    # RSS
 
     item = soup.find("item")
 
@@ -217,7 +309,10 @@ async def _get_latest_post_rss():
 
         return {
             "title": title,
-            "url": url,
+            "url": urljoin(
+                BLOG_URL,
+                url,
+            ),
             "date": pub_date,
         }
 
@@ -259,7 +354,137 @@ def _get_teaser(text, limit=400):
     )
 
 
+def _get_srcset_url(srcset):
+
+    if not srcset:
+        return None
+
+    candidates = []
+
+    for item in srcset.split(","):
+
+        parts = item.strip().split()
+
+        if not parts:
+            continue
+
+        url = parts[0]
+        quality = 0
+
+        if len(parts) > 1:
+
+            descriptor = parts[1]
+
+            match = re.match(
+                r"(\d+(?:\.\d+)?)(w|x)",
+                descriptor,
+            )
+
+            if match:
+
+                quality = float(
+                    match.group(1)
+                )
+
+        candidates.append(
+            (quality, url)
+        )
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda item: item[0]
+    )
+
+    return candidates[-1][1]
+
+
+def _get_image_url(img, base_url):
+
+    candidates = [
+        img.get("data-src"),
+        img.get("data-original"),
+        img.get("data-lazy-src"),
+        img.get("src"),
+        _get_srcset_url(
+            img.get("srcset")
+        ),
+    ]
+
+    for candidate in candidates:
+
+        if not candidate:
+            continue
+
+        candidate = candidate.strip()
+
+        if (
+            not candidate
+            or candidate.startswith("data:")
+            or candidate.startswith("blob:")
+        ):
+            continue
+
+        return urljoin(
+            base_url,
+            candidate,
+        )
+
+    return None
+
+
+def _prepare_images(body, base_url):
+
+    hero_image = None
+
+    for img in body.find_all("img"):
+
+        image_url = _get_image_url(
+            img,
+            base_url,
+        )
+
+        if not image_url:
+            continue
+
+        img["src"] = image_url
+
+        for attribute in (
+            "data-src",
+            "data-original",
+            "data-lazy-src",
+            "data-srcset",
+            "srcset",
+            "loading",
+        ):
+
+            img.attrs.pop(
+                attribute,
+                None,
+            )
+
+        if hero_image is None:
+
+            hero_image = image_url
+
+    print(
+        f"Images prepared | "
+        f"Count={len(body.find_all('img'))} | "
+        f"Hero={hero_image}"
+    )
+
+    return hero_image
+
+
 async def fetch_article(url):
+
+    started = time.perf_counter()
+
+    url = urljoin(
+        BLOG_URL,
+        url,
+    )
 
     html = await _get(url)
 
@@ -267,6 +492,17 @@ async def fetch_article(url):
         raise Exception(
             f"Article unavailable: {url}"
         )
+
+    download_time = (
+        time.perf_counter()
+        - started
+    )
+
+    parse_started = time.perf_counter()
+
+    print(
+        f"Original HTML size: {len(html)}"
+    )
 
     soup = BeautifulSoup(
         html,
@@ -295,44 +531,14 @@ async def fetch_article(url):
             "Post body not found"
         )
 
-    hero_image = None
+    element_count = len(
+        body.find_all(True)
+    )
 
-    for img in body.find_all("img"):
-
-        parent = img.parent
-
-        if (
-            parent
-            and parent.name == "a"
-            and parent.get("href")
-        ):
-
-            hero_image = parent["href"]
-
-            break
-
-        src = (
-            img.get("data-src")
-            or img.get("src")
-        )
-
-        if src:
-
-            hero_image = src
-
-            break
-
-    for img in body.find_all("img"):
-
-        parent = img.parent
-
-        if (
-            parent
-            and parent.name == "a"
-            and parent.get("href")
-        ):
-
-            img["src"] = parent["href"]
+    hero_image = _prepare_images(
+        body,
+        url,
+    )
 
     article_text = body.get_text(
         "\n",
@@ -344,10 +550,25 @@ async def fetch_article(url):
         limit=400,
     )
 
+    parse_time = (
+        time.perf_counter()
+        - parse_started
+    )
+
+    print(
+        f"Article fetched | "
+        f"Download={download_time:.3f}s | "
+        f"Parsing={parse_time:.3f}s | "
+        f"Elements={element_count} | "
+        f"HTML={len(html)}"
+    )
+
     return {
         "title": title,
         "url": url,
         "hero_image": hero_image,
         "teaser": teaser,
         "html": str(body),
+        "original_html_length": len(html),
+        "element_count": element_count,
     }
