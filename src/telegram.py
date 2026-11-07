@@ -29,16 +29,41 @@ async def _post(
         f"bot{token}/{method}"
     )
 
+    print(
+        f"[TELEGRAM] {method} REQUEST STARTED"
+    )
+
     async with httpx.AsyncClient(
         timeout=timeout
     ) as client:
 
-        response = await client.post(
-            url,
-            json=payload,
-        )
+        try:
+
+            response = await client.post(
+                url,
+                json=payload,
+            )
+
+        except Exception as e:
+
+            print(
+                f"[TELEGRAM] {method} "
+                f"NETWORK ERROR: {type(e).__name__}: {e}"
+            )
+
+            raise
+
+    print(
+        f"[TELEGRAM] {method} "
+        f"HTTP STATUS: {response.status_code}"
+    )
 
     if not response.is_success:
+
+        print(
+            f"[TELEGRAM] {method} "
+            f"FAILED RESPONSE: {response.text}"
+        )
 
         raise Exception(
             response.text
@@ -48,9 +73,18 @@ async def _post(
 
     if not data.get("ok"):
 
+        print(
+            f"[TELEGRAM] {method} "
+            f"TELEGRAM ERROR: {response.text}"
+        )
+
         raise Exception(
             response.text
         )
+
+    print(
+        f"[TELEGRAM] {method} SUCCESS"
+    )
 
     return data
 
@@ -81,17 +115,43 @@ async def send_photo(
     caption,
 ):
 
-    return await _post(
-        env,
-        "sendPhoto",
-        {
-            "chat_id": chat_id,
-            "photo": photo,
-            "caption": caption,
-            "parse_mode": "HTML",
-        },
-        timeout=60.0,
+    print(
+        "[ARTICLE] HERO IMAGE URL:",
+        photo,
     )
+
+    print(
+        "[ARTICLE] SENDING HERO IMAGE"
+    )
+
+    try:
+
+        result = await _post(
+            env,
+            "sendPhoto",
+            {
+                "chat_id": chat_id,
+                "photo": photo,
+                "caption": caption,
+                "parse_mode": "HTML",
+            },
+            timeout=60.0,
+        )
+
+        print(
+            "[ARTICLE] HERO IMAGE SENT SUCCESSFULLY"
+        )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            "[ARTICLE] HERO IMAGE FAILED:",
+            repr(e),
+        )
+
+        raise
 
 
 async def send_rich_message(
@@ -100,6 +160,20 @@ async def send_rich_message(
     html,
     reply_to_message_id=None,
 ):
+
+    print(
+        "[ARTICLE] RICH MESSAGE STARTED"
+    )
+
+    print(
+        "[ARTICLE] RICH HTML LENGTH:",
+        len(html),
+    )
+
+    print(
+        "[ARTICLE] REPLY TO MESSAGE ID:",
+        reply_to_message_id,
+    )
 
     payload = {
         "chat_id": chat_id,
@@ -115,12 +189,29 @@ async def send_rich_message(
                 reply_to_message_id,
         }
 
-    return await _post(
-        env,
-        "sendRichMessage",
-        payload,
-        timeout=120.0,
-    )
+    try:
+
+        result = await _post(
+            env,
+            "sendRichMessage",
+            payload,
+            timeout=120.0,
+        )
+
+        print(
+            "[ARTICLE] RICH MESSAGE SENT SUCCESSFULLY"
+        )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            "[ARTICLE] RICH MESSAGE FAILED:",
+            repr(e),
+        )
+
+        raise
 
 
 async def send_channel_article(
@@ -137,9 +228,11 @@ async def send_channel_article(
 
     reply_id = None
 
-    # Hero image
-
     if hero_image:
+
+        print(
+            "[CHANNEL] SENDING HERO IMAGE"
+        )
 
         photo = await send_photo(
             env,
@@ -153,13 +246,24 @@ async def send_channel_article(
             ["message_id"]
         )
 
-    # RichMessage
+        print(
+            "[CHANNEL] HERO IMAGE MESSAGE ID:",
+            reply_id,
+        )
+
+    print(
+        "[CHANNEL] SENDING RICH MESSAGE"
+    )
 
     result = await send_rich_message(
         env,
         channel_id,
         html,
         reply_id,
+    )
+
+    print(
+        "[CHANNEL] ARTICLE PUBLISHED SUCCESSFULLY"
     )
 
     return result
@@ -172,8 +276,27 @@ async def send_article(
     publish_channel=False,
 ):
 
+    print(
+        "\n========== ARTICLE PROCESS START =========="
+    )
+
+    print(
+        "[ARTICLE] URL:",
+        article_url,
+    )
+
     article = await fetch_article(
         article_url
+    )
+
+    print(
+        "[ARTICLE] FETCH SUCCESS:",
+        article["title"],
+    )
+
+    print(
+        "[ARTICLE] SELECTED HERO IMAGE:",
+        article["hero_image"],
     )
 
     article_html = clean_article(
@@ -190,11 +313,23 @@ async def send_article(
         article["teaser"],
     )
 
-    # Private/user chat
+    print(
+        "[ARTICLE] CLEANED HTML LENGTH:",
+        len(article_html),
+    )
+
+    print(
+        "[ARTICLE] RICH HTML LENGTH:",
+        len(rich_html),
+    )
 
     photo_result = None
 
     if article["hero_image"]:
+
+        print(
+            "[ARTICLE] PRIVATE CHAT PHOTO STAGE"
+        )
 
         photo_result = await send_photo(
             env,
@@ -203,12 +338,21 @@ async def send_article(
             preview[:1024],
         )
 
-    # Channel
+        print(
+            "[ARTICLE] PRIVATE CHAT PHOTO RESULT:",
+            photo_result,
+        )
+
+    else:
+
+        print(
+            "[ARTICLE] NO HERO IMAGE FOUND"
+        )
 
     if publish_channel:
 
         print(
-            "Publishing article to channel"
+            "[ARTICLE] CHANNEL PUBLISHING STAGE"
         )
 
         await send_channel_article(
@@ -217,8 +361,6 @@ async def send_article(
             rich_html,
             article["hero_image"],
         )
-
-    # Private RichMessage
 
     reply_id = None
 
@@ -231,14 +373,26 @@ async def send_article(
                 ["message_id"]
             )
 
-        except Exception:
-            pass
+        except Exception as e:
+
+            print(
+                "[ARTICLE] PHOTO MESSAGE ID ERROR:",
+                repr(e),
+            )
+
+    print(
+        "[ARTICLE] PRIVATE RICH MESSAGE STAGE"
+    )
 
     await send_rich_message(
         env,
         chat_id,
         rich_html,
         reply_id,
+    )
+
+    print(
+        "========== ARTICLE PROCESS COMPLETED ==========\n"
     )
 
     return article
