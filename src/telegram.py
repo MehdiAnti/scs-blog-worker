@@ -15,73 +15,6 @@ from html_build import (
 )
 
 
-async def diagnose_image_url(label, url):
-
-    print(f"[IMAGE DIAG] START: {label}")
-    print(f"[IMAGE DIAG] REQUEST URL: {url}")
-
-    try:
-
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=45.0,
-        ) as client:
-
-            response = await client.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "image/*,*/*",
-                },
-            )
-
-        print(
-            f"[IMAGE DIAG] {label} STATUS:",
-            response.status_code,
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} FINAL URL:",
-            str(response.url),
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} CONTENT TYPE:",
-            response.headers.get("content-type"),
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} CONTENT LENGTH HEADER:",
-            response.headers.get("content-length"),
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} ACTUAL SIZE:",
-            len(response.content),
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} REDIRECTS:",
-            [
-                str(item.url)
-                for item in response.history
-            ],
-        )
-
-        print(
-            f"[IMAGE DIAG] {label} FIRST 16 BYTES:",
-            response.content[:16].hex(),
-        )
-
-    except Exception as e:
-
-        print(
-            f"[IMAGE DIAG] {label} ERROR:",
-            type(e).__name__,
-            str(e),
-        )
-
-
 async def _post(
     env,
     method,
@@ -96,22 +29,62 @@ async def _post(
         f"bot{token}/{method}"
     )
 
+    print(
+        f"[TELEGRAM] {method} REQUEST STARTED"
+    )
+
     async with httpx.AsyncClient(
         timeout=timeout
     ) as client:
 
-        response = await client.post(
-            url,
-            json=payload,
-        )
+        try:
+
+            response = await client.post(
+                url,
+                json=payload,
+            )
+
+        except Exception as e:
+
+            print(
+                f"[TELEGRAM] {method} "
+                f"NETWORK ERROR: {type(e).__name__}: {e}"
+            )
+
+            raise
+
+    print(
+        f"[TELEGRAM] {method} "
+        f"HTTP STATUS: {response.status_code}"
+    )
 
     if not response.is_success:
-        raise Exception(response.text)
+
+        print(
+            f"[TELEGRAM] {method} "
+            f"FAILED RESPONSE: {response.text}"
+        )
+
+        raise Exception(
+            response.text
+        )
 
     data = response.json()
 
     if not data.get("ok"):
-        raise Exception(response.text)
+
+        print(
+            f"[TELEGRAM] {method} "
+            f"TELEGRAM ERROR: {response.text}"
+        )
+
+        raise Exception(
+            response.text
+        )
+
+    print(
+        f"[TELEGRAM] {method} SUCCESS"
+    )
 
     return data
 
@@ -142,6 +115,15 @@ async def send_photo(
     caption,
 ):
 
+    print(
+        "[ARTICLE] HERO IMAGE URL:",
+        photo,
+    )
+
+    print(
+        "[ARTICLE] SENDING HERO IMAGE BY URL"
+    )
+
     return await _post(
         env,
         "sendPhoto",
@@ -155,12 +137,277 @@ async def send_photo(
     )
 
 
+async def send_photo_upload(
+    env,
+    chat_id,
+    photo_url,
+    caption,
+):
+
+    print(
+        "[IMAGE TEST B] DOWNLOADING IMAGE"
+    )
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=60.0,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "image/*,*/*",
+        },
+    ) as client:
+
+        response = await client.get(
+            photo_url
+        )
+
+    print(
+        "[IMAGE TEST B] DOWNLOAD STATUS:",
+        response.status_code,
+    )
+
+    print(
+        "[IMAGE TEST B] FINAL URL:",
+        str(response.url),
+    )
+
+    print(
+        "[IMAGE TEST B] CONTENT TYPE:",
+        response.headers.get("content-type"),
+    )
+
+    print(
+        "[IMAGE TEST B] FILE SIZE:",
+        len(response.content),
+    )
+
+    print(
+        "[IMAGE TEST B] FIRST 16 BYTES:",
+        response.content[:16].hex(),
+    )
+
+    response.raise_for_status()
+
+    content_type = (
+        response.headers.get(
+            "content-type",
+            "",
+        )
+        .split(";")[0]
+        .strip()
+    )
+
+    if not content_type.startswith("image/"):
+
+        raise Exception(
+            "Downloaded content is not an image: "
+            + content_type
+        )
+
+    if not response.content:
+
+        raise Exception(
+            "Downloaded image is empty"
+        )
+
+    extension = (
+        content_type.split("/")[-1]
+        .replace("jpeg", "jpg")
+    )
+
+    filename = f"hero.{extension}"
+
+    token = get_bot_token(env)
+
+    telegram_url = (
+        f"https://api.telegram.org/"
+        f"bot{token}/sendPhoto"
+    )
+
+    print(
+        "[IMAGE TEST B] UPLOADING IMAGE BYTES TO TELEGRAM"
+    )
+
+    async with httpx.AsyncClient(
+        timeout=120.0
+    ) as client:
+
+        telegram_response = await client.post(
+            telegram_url,
+            data={
+                "chat_id": str(chat_id),
+                "caption": caption,
+                "parse_mode": "HTML",
+            },
+            files={
+                "photo": (
+                    filename,
+                    response.content,
+                    content_type,
+                ),
+            },
+        )
+
+    print(
+        "[IMAGE TEST B] TELEGRAM HTTP STATUS:",
+        telegram_response.status_code,
+    )
+
+    print(
+        "[IMAGE TEST B] TELEGRAM RESPONSE:",
+        telegram_response.text,
+    )
+
+    telegram_response.raise_for_status()
+
+    data = telegram_response.json()
+
+    if not data.get("ok"):
+
+        raise Exception(
+            telegram_response.text
+        )
+
+    print(
+        "[IMAGE TEST B] UPLOAD SUCCESS"
+    )
+
+    return data
+
+
+async def send_photo_ab_test(
+    env,
+    chat_id,
+    photo_url,
+    caption,
+):
+
+    result_a = None
+    error_a = None
+
+    print(
+        "\n========== IMAGE A/B TEST =========="
+    )
+
+    print(
+        "[IMAGE TEST] IMAGE URL:",
+        photo_url,
+    )
+
+    print(
+        "[IMAGE TEST A] TESTING TELEGRAM URL FETCH"
+    )
+
+    try:
+
+        result_a = await send_photo(
+            env,
+            chat_id,
+            photo_url,
+            caption,
+        )
+
+        print(
+            "[IMAGE TEST A] RESULT: SUCCESS"
+        )
+
+    except Exception as e:
+
+        error_a = e
+
+        print(
+            "[IMAGE TEST A] RESULT: FAILED"
+        )
+
+        print(
+            "[IMAGE TEST A] ERROR:",
+            repr(e),
+        )
+
+    result_b = None
+    error_b = None
+
+    print(
+        "[IMAGE TEST B] TESTING DIRECT IMAGE UPLOAD"
+    )
+
+    try:
+
+        result_b = await send_photo_upload(
+            env,
+            chat_id,
+            photo_url,
+            caption,
+        )
+
+        print(
+            "[IMAGE TEST B] RESULT: SUCCESS"
+        )
+
+    except Exception as e:
+
+        error_b = e
+
+        print(
+            "[IMAGE TEST B] RESULT: FAILED"
+        )
+
+        print(
+            "[IMAGE TEST B] ERROR:",
+            repr(e),
+        )
+
+    print(
+        "========== IMAGE A/B RESULTS =========="
+    )
+
+    print(
+        "[IMAGE TEST] URL METHOD:",
+        "SUCCESS" if result_a else "FAILED",
+    )
+
+    print(
+        "[IMAGE TEST] UPLOAD METHOD:",
+        "SUCCESS" if result_b else "FAILED",
+    )
+
+    print(
+        "========== IMAGE A/B TEST COMPLETED =========="
+    )
+
+    if result_b:
+        return result_b
+
+    if result_a:
+        return result_a
+
+    raise Exception(
+        "Both image methods failed. "
+        f"URL method: {error_a}. "
+        f"Upload method: {error_b}"
+    )
+
+
 async def send_rich_message(
     env,
     chat_id,
     html,
     reply_to_message_id=None,
 ):
+
+    print(
+        "[ARTICLE] RICH MESSAGE STARTED"
+    )
+
+    print(
+        "[ARTICLE] RICH HTML LENGTH:",
+        len(html),
+    )
+
+    print(
+        "[ARTICLE] REPLY TO MESSAGE ID:",
+        reply_to_message_id,
+    )
 
     payload = {
         "chat_id": chat_id,
@@ -172,15 +419,33 @@ async def send_rich_message(
     if reply_to_message_id:
 
         payload["reply_parameters"] = {
-            "message_id": reply_to_message_id,
+            "message_id":
+                reply_to_message_id,
         }
 
-    return await _post(
-        env,
-        "sendRichMessage",
-        payload,
-        timeout=120.0,
-    )
+    try:
+
+        result = await _post(
+            env,
+            "sendRichMessage",
+            payload,
+            timeout=120.0,
+        )
+
+        print(
+            "[ARTICLE] RICH MESSAGE SENT SUCCESSFULLY"
+        )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            "[ARTICLE] RICH MESSAGE FAILED:",
+            repr(e),
+        )
+
+        raise
 
 
 async def send_channel_article(
@@ -199,6 +464,10 @@ async def send_channel_article(
 
     if hero_image:
 
+        print(
+            "[CHANNEL] SENDING HERO IMAGE"
+        )
+
         photo = await send_photo(
             env,
             channel_id,
@@ -211,12 +480,27 @@ async def send_channel_article(
             ["message_id"]
         )
 
-    return await send_rich_message(
+        print(
+            "[CHANNEL] HERO IMAGE MESSAGE ID:",
+            reply_id,
+        )
+
+    print(
+        "[CHANNEL] SENDING RICH MESSAGE"
+    )
+
+    result = await send_rich_message(
         env,
         channel_id,
         html,
         reply_id,
     )
+
+    print(
+        "[CHANNEL] ARTICLE PUBLISHED SUCCESSFULLY"
+    )
+
+    return result
 
 
 async def send_article(
@@ -226,23 +510,27 @@ async def send_article(
     publish_channel=False,
 ):
 
+    print(
+        "\n========== ARTICLE PROCESS START =========="
+    )
+
+    print(
+        "[ARTICLE] URL:",
+        article_url,
+    )
+
     article = await fetch_article(
         article_url
     )
 
     print(
-        "[IMAGE DIAG] SELECTED HERO:",
+        "[ARTICLE] FETCH SUCCESS:",
+        article["title"],
+    )
+
+    print(
+        "[ARTICLE] SELECTED HERO IMAGE:",
         article["hero_image"],
-    )
-
-    await diagnose_image_url(
-        "WUJЕK_BOНUN",
-        "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg2nIzq-57rWcF817SZtaNprAXfd5-I7OBJykv8ikfYFNTaPra9X5IzjIeWCg-pTwjanTnMnohKxoGcl0jxzOHhOY8WqUssIfqQJdd5xf96B3U6iWe0__mOCLZJlqRW21XGO3bQvl8eYki3O6EDFxBQM_hbZN_a3WQ6gjTcBC7y8cIbM7GriYmukiC-kPs/s1920/SOTR_ThumbnailFHD.jpg",
-    )
-
-    await diagnose_image_url(
-        "PINKTOBER",
-        "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjsrk513MY-aISsWKpXHe8cZtLS98Xr1NLgCt82ULcQoMiMbpvk_h5ntTGATJU17ugMPv6PYJVWgofzbsPVV1bf43ihgVIwIdt3mMT4kO5T00MHdSpn6vBnIGpcyin_Qg_5JwvREUNG8bojf6tLMsTqW3oO8rEIQDhs_q3QPwOvAyUMjgY0IzDisR0Q/s1920/Socmedia_1920x1080_Pinktober_2026_Conclusion.jpg",
     )
 
     article_html = clean_article(
@@ -259,18 +547,47 @@ async def send_article(
         article["teaser"],
     )
 
+    print(
+        "[ARTICLE] CLEANED HTML LENGTH:",
+        len(article_html),
+    )
+
+    print(
+        "[ARTICLE] RICH HTML LENGTH:",
+        len(rich_html),
+    )
+
     photo_result = None
 
     if article["hero_image"]:
 
-        photo_result = await send_photo(
+        print(
+            "[ARTICLE] PRIVATE CHAT IMAGE A/B TEST"
+        )
+
+        photo_result = await send_photo_ab_test(
             env,
             chat_id,
             article["hero_image"],
             preview[:1024],
         )
 
+        print(
+            "[ARTICLE] PRIVATE CHAT PHOTO RESULT:",
+            photo_result,
+        )
+
+    else:
+
+        print(
+            "[ARTICLE] NO HERO IMAGE FOUND"
+        )
+
     if publish_channel:
+
+        print(
+            "[ARTICLE] CHANNEL PUBLISHING STAGE"
+        )
 
         await send_channel_article(
             env,
@@ -290,14 +607,26 @@ async def send_article(
                 ["message_id"]
             )
 
-        except Exception:
-            pass
+        except Exception as e:
+
+            print(
+                "[ARTICLE] PHOTO MESSAGE ID ERROR:",
+                repr(e),
+            )
+
+    print(
+        "[ARTICLE] PRIVATE RICH MESSAGE STAGE"
+    )
 
     await send_rich_message(
         env,
         chat_id,
         rich_html,
         reply_id,
+    )
+
+    print(
+        "========== ARTICLE PROCESS COMPLETED ==========\n"
     )
 
     return article
