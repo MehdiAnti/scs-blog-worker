@@ -68,6 +68,7 @@ STORE_IDS = {
     "520550": "ATS - Steering Creations Pack",
     "463740": "ATS - Arizona",
     "450550": "ATS - Wheel Tuning Pack",
+    "5411740": "ATS - Route 66 Paint Jobs Pack",
 
     # ETS2
     "227300": "ETS2",
