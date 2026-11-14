@@ -24,14 +24,22 @@ from config import (
 
 
 async def run_check(env):
+    print("Check started")
 
     status = await get_status(
         env
     )
 
     try:
+        print("Fetching latest blog post")
 
         latest = await get_latest_post()
+
+        print(
+            f"Latest post found | "
+            f"Title={latest['title']} | "
+            f"URL={latest['url']}"
+        )
 
         status["last_check"] = (
             datetime.now(
@@ -41,10 +49,13 @@ async def run_check(env):
             )
         )
 
+        print("Checking article history")
+
         if not await article_is_new(
             env,
             latest["url"],
         ):
+            print("No new article")
 
             status["last_result"] = (
                 "no_new_article"
@@ -58,9 +69,10 @@ async def run_check(env):
             )
 
             return {
-                "status":
-                    "no_new_article",
+                "status": "no_new_article",
             }
+
+        print("New article detected")
 
         article = await send_article(
             env,
@@ -69,13 +81,18 @@ async def run_check(env):
             publish_channel=True,
         )
 
-        # Only save AFTER all Telegram
-        # publishing succeeded.
+        print(
+            "Telegram publishing completed"
+        )
 
         await save_detected(
             env,
             article["url"],
             article["title"],
+        )
+
+        print(
+            "Article saved to detected storage"
         )
 
         status["last_result"] = "posted"
@@ -92,6 +109,8 @@ async def run_check(env):
             status,
         )
 
+        print("Check completed successfully")
+
         return {
             "status": "posted",
             "url": article["url"],
@@ -99,22 +118,24 @@ async def run_check(env):
         }
 
     except Exception as e:
+        print(
+            "Check failed:",
+            repr(e),
+        )
 
         status["last_result"] = "failed"
         status["last_error"] = str(e)
 
         try:
-
             await save_status(
                 env,
                 status,
             )
 
         except Exception as status_error:
-
             print(
                 "Failed to save status:",
-                status_error,
+                repr(status_error),
             )
 
         raise
