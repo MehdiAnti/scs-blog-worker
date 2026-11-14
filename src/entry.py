@@ -1,5 +1,3 @@
-import json
-
 from workers import (
     WorkerEntrypoint,
     Response,
@@ -24,49 +22,34 @@ class Default(WorkerEntrypoint):
         self,
         request,
     ):
-
-        url = str(
-            request.url
-        )
-
+        url = str(request.url)
         method = request.method
-
-        # Health
 
         if (
             method == "GET"
             and url.endswith("/")
         ):
-
             return Response(
                 "OK",
                 status=200,
             )
 
-        # Health endpoint
-
         if (
             method == "GET"
             and url.endswith("/health")
         ):
-
             return Response.json(
                 {
                     "ok": True,
-                    "service":
-                        "scs-blog-worker",
+                    "service": "scs-blog-worker",
                 }
             )
-
-        # Manual check
 
         if (
             method == "GET"
             and url.endswith("/check")
         ):
-
             try:
-
                 result = await run_check(
                     self.env
                 )
@@ -77,6 +60,10 @@ class Default(WorkerEntrypoint):
                 )
 
             except Exception as e:
+                print(
+                    "Manual check failed:",
+                    e,
+                )
 
                 return Response.json(
                     {
@@ -85,13 +72,10 @@ class Default(WorkerEntrypoint):
                     status=500,
                 )
 
-        # Telegram webhook
-
         if (
             method == "POST"
             and url.endswith("/webhook")
         ):
-
             return await self._webhook(
                 request
             )
@@ -105,14 +89,14 @@ class Default(WorkerEntrypoint):
         self,
         request,
     ):
-
         try:
+            update = await request.json()
 
-            update = (
-                await request.json()
+        except Exception as e:
+            print(
+                "Webhook JSON error:",
+                e,
             )
-
-        except Exception:
 
             return Response.json(
                 {
@@ -122,9 +106,7 @@ class Default(WorkerEntrypoint):
 
         message = (
             update.get("message")
-            or update.get(
-                "edited_message"
-            )
+            or update.get("edited_message")
             or {}
         )
 
@@ -133,41 +115,9 @@ class Default(WorkerEntrypoint):
             or {}
         )
 
-        chat_id = chat.get(
-            "id"
-        )
+        chat_id = chat.get("id")
 
         if chat_id is None:
-
-            return Response.json(
-                {
-                    "ok": True,
-                }
-            )
-
-        if (
-            int(chat_id)
-            != get_allowed_user(
-                self.env
-            )
-        ):
-
-            return Response.json(
-                {
-                    "ok": True,
-                }
-            )
-
-        text = (
-            message.get(
-                "text",
-                "",
-            )
-            .strip()
-        )
-
-        if not text:
-
             return Response.json(
                 {
                     "ok": True,
@@ -175,19 +125,51 @@ class Default(WorkerEntrypoint):
             )
 
         try:
-
-            await handle_command(
-                self.env,
-                chat_id,
-                text,
-            )
+            if (
+                int(chat_id)
+                != get_allowed_user(self.env)
+            ):
+                return Response.json(
+                    {
+                        "ok": True,
+                    }
+                )
 
         except Exception as e:
-
             print(
-                "Command error:",
+                "Webhook authorization error:",
                 e,
             )
+
+            return Response.json(
+                {
+                    "ok": True,
+                }
+            )
+
+        command_text = (
+            message.get("text", "")
+            .strip()
+        )
+
+        if not command_text:
+            return Response.json(
+                {
+                    "ok": True,
+                }
+            )
+
+        print(
+            f"Webhook accepted | "
+            f"Command={command_text.split()[0]}"
+        )
+
+        self.ctx.waitUntil(
+            self._process_command(
+                chat_id,
+                command_text,
+            )
+        )
 
         return Response.json(
             {
@@ -195,20 +177,44 @@ class Default(WorkerEntrypoint):
             }
         )
 
+    async def _process_command(
+        self,
+        chat_id,
+        command_text,
+    ):
+        try:
+            print(
+                f"Background command started | "
+                f"Command={command_text.split()[0]}"
+            )
+
+            await handle_command(
+                self.env,
+                chat_id,
+                command_text,
+            )
+
+            print(
+                "Background command completed"
+            )
+
+        except Exception as e:
+            print(
+                "Background command failed:",
+                repr(e),
+            )
+
     async def scheduled(
         self,
         controller,
         env,
         ctx,
     ):
-
         print(
-            f"Cron started: "
-            f"{controller.cron}"
+            f"Cron started: {controller.cron}"
         )
 
         try:
-
             result = await run_check(
                 self.env
             )
@@ -219,13 +225,9 @@ class Default(WorkerEntrypoint):
             )
 
         except Exception as e:
-
             print(
                 "Cron failed:",
-                e,
+                repr(e),
             )
-
-            # Re-raise so the scheduled
-            # invocation is recorded as failed.
 
             raise
