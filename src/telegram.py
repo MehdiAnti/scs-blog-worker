@@ -18,11 +18,11 @@ from html_build import (
 MAX_PHOTO_SIZE = 10 * 1024 * 1024
 
 HTTP_TIMEOUT = httpx.Timeout(
-    20.0,
-    connect=8.0,
-    read=20.0,
-    write=20.0,
-    pool=5.0,
+    45.0,
+    connect=25.0,
+    read=45.0,
+    write=45.0,
+    pool=10.0,
 )
 
 
