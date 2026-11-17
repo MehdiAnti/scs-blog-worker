@@ -12,6 +12,7 @@ from storage import (
     save_detected,
     get_status,
     save_status,
+    clear_publish_state,
 )
 
 from telegram import (
@@ -79,6 +80,7 @@ async def run_check(env):
             get_allowed_user(env),
             latest["url"],
             publish_channel=True,
+            track_progress=True,
         )
 
         print(
@@ -89,6 +91,11 @@ async def run_check(env):
             env,
             article["url"],
             article["title"],
+        )
+
+        await clear_publish_state(
+            env,
+            article["url"],
         )
 
         print(
