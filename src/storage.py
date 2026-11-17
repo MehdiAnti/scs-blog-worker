@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 from config import (
@@ -21,6 +22,9 @@ DEFAULT_STATUS = {
 }
 
 
+PUBLISH_STATE_PREFIX = "publish_state:"
+
+
 def _normalize_url(url):
     return (
         (url or "")
@@ -28,6 +32,47 @@ def _normalize_url(url):
         .rstrip("/")
         .strip()
     )
+
+
+def get_publish_state_key(article_url):
+    normalized_url = _normalize_url(article_url)
+
+    digest = hashlib.sha256(
+        normalized_url.encode("utf-8")
+    ).hexdigest()
+
+    return f"{PUBLISH_STATE_PREFIX}{digest}"
+
+
+async def get_publish_state(env, key):
+    value = await env.KV_BINDING.get(key)
+
+    if not value:
+        return {}
+
+    try:
+        data = json.loads(value)
+
+        if isinstance(data, dict):
+            return data
+
+    except Exception:
+        pass
+
+    return {}
+
+
+async def save_publish_state(env, key, state):
+    await env.KV_BINDING.put(
+        key,
+        json.dumps(state),
+    )
+
+
+async def clear_publish_state(env, article_url):
+    key = get_publish_state_key(article_url)
+
+    await env.KV_BINDING.delete(key)
 
 
 async def get_last_article(env):
