@@ -14,6 +14,11 @@ from html_build import (
     build_rich_article,
 )
 
+from storage import (
+    get_publish_state,
+    save_publish_state,
+)
+
 
 MAX_PHOTO_SIZE = 10 * 1024 * 1024
 
@@ -201,6 +206,89 @@ async def send_photo(
     return data
 
 
+async def _send_tracked_photo(
+    env,
+    state_key,
+    state,
+    stage,
+    chat_id,
+    image_data,
+    content_type,
+    extension,
+    caption,
+):
+    previous = state.get(stage)
+
+    if previous:
+        print(
+            f"Skipping photo | Stage={stage} | "
+            f"State={previous.get('status', 'unknown')}"
+        )
+
+        return previous.get("message_id")
+
+    state[stage] = {
+        "status": "sending",
+    }
+
+    await save_publish_state(
+        env,
+        state_key,
+        state,
+    )
+
+    try:
+        result = await send_photo(
+            env,
+            chat_id,
+            image_data,
+            content_type,
+            extension,
+            caption,
+        )
+
+    except (httpx.ConnectTimeout, httpx.ConnectError):
+        state.pop(stage, None)
+
+        await save_publish_state(
+            env,
+            state_key,
+            state,
+        )
+
+        raise
+
+    except Exception:
+        state[stage] = {
+            "status": "uncertain",
+        }
+
+        await save_publish_state(
+            env,
+            state_key,
+            state,
+        )
+
+        raise
+
+    message_id = (
+        result.get("result", {}).get("message_id")
+    )
+
+    state[stage] = {
+        "status": "sent",
+        "message_id": message_id,
+    }
+
+    await save_publish_state(
+        env,
+        state_key,
+        state,
+    )
+
+    return message_id
+
+
 async def send_rich_message(
     env,
     chat_id,
@@ -244,6 +332,8 @@ async def send_channel_article(
     image_data=None,
     content_type=None,
     extension=None,
+    state_key=None,
+    state=None,
 ):
     if not get_post_to_channel(env):
         print("Channel publishing disabled")
@@ -254,18 +344,32 @@ async def send_channel_article(
     reply_id = None
 
     if image_data:
-        photo = await send_photo(
-            env,
-            channel_id,
-            image_data,
-            content_type,
-            extension,
-            preview[:1024],
-        )
+        if state_key and state is not None:
+            reply_id = await _send_tracked_photo(
+                env,
+                state_key,
+                state,
+                "channel_photo",
+                channel_id,
+                image_data,
+                content_type,
+                extension,
+                preview[:1024],
+            )
 
-        reply_id = (
-            photo["result"]["message_id"]
-        )
+        else:
+            photo = await send_photo(
+                env,
+                channel_id,
+                image_data,
+                content_type,
+                extension,
+                preview[:1024],
+            )
+
+            reply_id = (
+                photo["result"]["message_id"]
+            )
 
     return await send_rich_message(
         env,
@@ -280,10 +384,26 @@ async def send_article(
     chat_id,
     article_url,
     publish_channel=False,
+    track_progress=False,
 ):
     print(
         f"Article processing started | URL={article_url}"
     )
+
+    state_key = None
+    state = None
+
+    if track_progress:
+        from storage import get_publish_state_key
+
+        state_key = get_publish_state_key(
+            article_url
+        )
+
+        state = await get_publish_state(
+            env,
+            state_key,
+        )
 
     article = await fetch_article(
         article_url
@@ -324,18 +444,33 @@ async def send_article(
             article["hero_image"]
         )
 
-        admin_photo = await send_photo(
-            env,
-            chat_id,
-            image_data,
-            content_type,
-            extension,
-            preview[:1024],
-        )
+        if track_progress:
+            admin_reply_id = await _send_tracked_photo(
+                env,
+                state_key,
+                state,
+                "admin_photo",
+                chat_id,
+                image_data,
+                content_type,
+                extension,
+                preview[:1024],
+            )
 
-        admin_reply_id = (
-            admin_photo["result"]["message_id"]
-        )
+        else:
+            admin_photo = await send_photo(
+                env,
+                chat_id,
+                image_data,
+                content_type,
+                extension,
+                preview[:1024],
+            )
+
+            admin_reply_id = (
+                admin_photo["result"]["message_id"]
+            )
+
     else:
         admin_reply_id = None
 
@@ -347,6 +482,8 @@ async def send_article(
             image_data,
             content_type,
             extension,
+            state_key if track_progress else None,
+            state,
         )
 
     await send_rich_message(
