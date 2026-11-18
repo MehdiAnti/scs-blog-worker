@@ -23,10 +23,10 @@ from storage import (
 MAX_PHOTO_SIZE = 10 * 1024 * 1024
 
 HTTP_TIMEOUT = httpx.Timeout(
-    45.0,
-    connect=25.0,
-    read=45.0,
-    write=45.0,
+    60.0,
+    connect=60.0,
+    read=60.0,
+    write=60.0,
     pool=10.0,
 )
 
@@ -247,20 +247,10 @@ async def _send_tracked_photo(
             caption,
         )
 
-    except (httpx.ConnectTimeout, httpx.ConnectError):
-        state.pop(stage, None)
-
-        await save_publish_state(
-            env,
-            state_key,
-            state,
-        )
-
-        raise
-
-    except Exception:
+    except Exception as e:
         state[stage] = {
             "status": "uncertain",
+            "error": str(e)[:500],
         }
 
         await save_publish_state(
