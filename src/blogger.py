@@ -109,9 +109,13 @@ async def _get_latest_post_homepage():
         "html.parser",
     )
 
-    post = soup.select_one(
-        "h3.post-title.entry-title a"
+    post = soup.find(
+        "h3",
+        class_="post-title entry-title",
     )
+
+    if post:
+        post = post.find("a")
 
     if not post:
         raise Exception("No post found")
@@ -139,8 +143,6 @@ async def _get_latest_post_rss():
         html,
         "xml",
     )
-
-    # Atom
 
     entry = soup.find("entry")
 
@@ -180,8 +182,6 @@ async def _get_latest_post_rss():
             "url": url,
             "date": pub_date,
         }
-
-    # RSS
 
     item = soup.find("item")
 
@@ -275,8 +275,9 @@ async def fetch_article(url):
 
     title = ""
 
-    title_tag = soup.select_one(
-        "h3.post-title.entry-title"
+    title_tag = soup.find(
+        "h3",
+        class_="post-title entry-title",
     )
 
     if title_tag:
@@ -285,9 +286,8 @@ async def fetch_article(url):
         )
 
     body = (
-        soup.select_one(".post-body")
-        or
-        soup.select_one(".entry-content")
+        soup.find(class_="post-body")
+        or soup.find(class_="entry-content")
     )
 
     if not body:
