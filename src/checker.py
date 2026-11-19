@@ -13,6 +13,7 @@ from storage import (
     get_status,
     save_status,
     clear_publish_state,
+    get_publish_settings,
 )
 
 from telegram import (
@@ -32,6 +33,38 @@ async def run_check(env):
     )
 
     try:
+        settings = await get_publish_settings(
+            env
+        )
+
+        if not (
+            settings["send_to_admin"]
+            or settings["post_to_channel"]
+        ):
+            print(
+                "Publishing disabled for both destinations"
+            )
+
+            status["last_check"] = (
+                datetime.now(
+                    timezone.utc
+                ).strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                )
+            )
+
+            status["last_result"] = "publishing_disabled"
+            status["last_error"] = ""
+
+            await save_status(
+                env,
+                status,
+            )
+
+            return {
+                "status": "publishing_disabled",
+            }
+
         print("Fetching latest blog post")
 
         latest = await get_latest_post()
