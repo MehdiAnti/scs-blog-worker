@@ -9,6 +9,7 @@ from checker import (
 
 from commands import (
     handle_command,
+    handle_callback,
 )
 
 from config import (
@@ -96,6 +97,67 @@ class Default(WorkerEntrypoint):
             print(
                 "Webhook JSON error:",
                 e,
+            )
+
+            return Response.json(
+                {
+                    "ok": True,
+                }
+            )
+
+        callback_query = update.get("callback_query")
+
+        if callback_query:
+            callback_user = (
+                callback_query.get("from")
+                or {}
+            )
+
+            callback_message = (
+                callback_query.get("message")
+                or {}
+            )
+
+            callback_chat = (
+                callback_message.get("chat")
+                or {}
+            )
+
+            callback_chat_id = callback_chat.get("id")
+
+            try:
+                allowed_user = get_allowed_user(
+                    self.env
+                )
+
+                if (
+                    int(callback_user.get("id", 0))
+                    != allowed_user
+                    or int(callback_chat_id or 0)
+                    != allowed_user
+                ):
+                    return Response.json(
+                        {
+                            "ok": True,
+                        }
+                    )
+
+            except Exception as e:
+                print(
+                    "Callback authorization error:",
+                    e,
+                )
+
+                return Response.json(
+                    {
+                        "ok": True,
+                    }
+                )
+
+            self.ctx.waitUntil(
+                self._process_callback(
+                    callback_query,
+                )
             )
 
             return Response.json(
@@ -201,6 +263,31 @@ class Default(WorkerEntrypoint):
         except Exception as e:
             print(
                 "Background command failed:",
+                repr(e),
+            )
+
+    async def _process_callback(
+        self,
+        callback_query,
+    ):
+        try:
+            print(
+                "Background callback started | "
+                f"Data={callback_query.get('data', '')}"
+            )
+
+            await handle_callback(
+                self.env,
+                callback_query,
+            )
+
+            print(
+                "Background callback completed"
+            )
+
+        except Exception as e:
+            print(
+                "Background callback failed:",
                 repr(e),
             )
 
