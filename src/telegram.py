@@ -220,12 +220,19 @@ async def _send_tracked_photo(
     previous = state.get(stage)
 
     if previous:
-        print(
-            f"Skipping photo | Stage={stage} | "
-            f"State={previous.get('status', 'unknown')}"
-        )
+        previous_status = previous.get("status")
 
-        return previous.get("message_id")
+        if previous_status in (
+            "sent",
+            "uncertain",
+            "sending",
+        ):
+            print(
+                f"Skipping photo | Stage={stage} | "
+                f"State={previous_status}"
+            )
+
+            return previous.get("message_id")
 
     state[stage] = {
         "status": "sending",
@@ -257,6 +264,11 @@ async def _send_tracked_photo(
             env,
             state_key,
             state,
+        )
+
+        print(
+            f"Photo delivery uncertain | "
+            f"Stage={stage} | Error={repr(e)}"
         )
 
         raise
