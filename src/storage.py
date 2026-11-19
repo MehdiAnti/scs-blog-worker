@@ -4,6 +4,9 @@ import json
 from config import (
     LATEST_ARTICLE_KEY,
     STATUS_KEY,
+    PUBLISH_SETTINGS_KEY,
+    get_post_to_channel,
+    get_send_to_admin,
 )
 
 
@@ -145,3 +148,59 @@ async def save_status(env, status):
         STATUS_KEY,
         json.dumps(status),
     )
+
+
+async def get_publish_settings(env):
+    settings = {
+        "post_to_channel": get_post_to_channel(env),
+        "send_to_admin": get_send_to_admin(env),
+    }
+
+    value = await env.KV_BINDING.get(
+        PUBLISH_SETTINGS_KEY
+    )
+
+    if not value:
+        return settings
+
+    try:
+        stored = json.loads(value)
+
+        if not isinstance(stored, dict):
+            return settings
+
+        for key in (
+            "post_to_channel",
+            "send_to_admin",
+        ):
+            if type(stored.get(key)) is bool:
+                settings[key] = stored[key]
+
+    except Exception as e:
+        print(
+            "Publishing settings read failed:",
+            repr(e),
+        )
+
+    return settings
+
+
+async def save_publish_settings(env, settings):
+    current = await get_publish_settings(env)
+
+    for key in (
+        "post_to_channel",
+        "send_to_admin",
+    ):
+        if (
+            key in settings
+            and type(settings[key]) is bool
+        ):
+            current[key] = settings[key]
+
+    await env.KV_BINDING.put(
+        PUBLISH_SETTINGS_KEY,
+        json.dumps(current),
+    )
+
+    return current
