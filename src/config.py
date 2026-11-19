@@ -12,6 +12,7 @@ USER_AGENT = (
 
 LATEST_ARTICLE_KEY = "latest_article"
 STATUS_KEY = "status"
+PUBLISH_SETTINGS_KEY = "publishing_settings"
 
 CRON = "*/5 * * * *"
 
@@ -45,5 +46,11 @@ def get_channel_id(env):
 
 def get_post_to_channel(env):
     value = getattr(env, "POST_TO_CHANNEL", "false")
+
+    return str(value).lower() == "true"
+
+
+def get_send_to_admin(env):
+    value = getattr(env, "SEND_TO_ADMIN", "true")
 
     return str(value).lower() == "true"
