@@ -45,19 +45,6 @@ MAIN_MENU_TEXT = (
 )
 
 
-def _main_menu_keyboard():
-    return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": "⚙️ Publishing Settings",
-                    "callback_data": "menu:settings",
-                }
-            ]
-        ]
-    }
-
-
 def _settings_keyboard(settings):
     channel_text = (
         "🟢 Channel: ON"
@@ -192,7 +179,9 @@ async def handle_callback(
             chat_id,
             message_id,
             MAIN_MENU_TEXT,
-            reply_markup=_main_menu_keyboard(),
+            reply_markup={
+                "inline_keyboard": []
+            },
         )
         return
 
@@ -243,7 +232,6 @@ async def cmd_start(
         env,
         chat_id,
         MAIN_MENU_TEXT,
-        reply_markup=_main_menu_keyboard(),
     )
 
 
