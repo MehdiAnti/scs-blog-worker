@@ -3,7 +3,6 @@ import httpx
 from config import (
     get_bot_token,
     get_channel_id,
-    get_post_to_channel,
 )
 
 from blogger import fetch_article
@@ -17,6 +16,7 @@ from html_build import (
 from storage import (
     get_publish_state,
     save_publish_state,
+    get_publish_settings,
 )
 
 
@@ -72,16 +72,66 @@ async def send_message(
     env,
     chat_id,
     text,
+    reply_markup=None,
 ):
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+
     return await _post(
         env,
         "sendMessage",
-        {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        },
+        payload,
+    )
+
+
+async def edit_message_text(
+    env,
+    chat_id,
+    message_id,
+    text,
+    reply_markup=None,
+):
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+
+    return await _post(
+        env,
+        "editMessageText",
+        payload,
+    )
+
+
+async def answer_callback_query(
+    env,
+    callback_query_id,
+    text=None,
+):
+    payload = {
+        "callback_query_id": callback_query_id,
+    }
+
+    if text:
+        payload["text"] = text
+
+    return await _post(
+        env,
+        "answerCallbackQuery",
+        payload,
     )
 
 
@@ -337,7 +387,9 @@ async def send_channel_article(
     state_key=None,
     state=None,
 ):
-    if not get_post_to_channel(env):
+    settings = await get_publish_settings(env)
+
+    if not settings["post_to_channel"]:
         print("Channel publishing disabled")
         return None
 
@@ -387,10 +439,26 @@ async def send_article(
     article_url,
     publish_channel=False,
     track_progress=False,
+    publish_admin=None,
 ):
     print(
         f"Article processing started | URL={article_url}"
     )
+
+    settings = await get_publish_settings(env)
+
+    if publish_admin is None:
+        publish_admin = settings["send_to_admin"]
+
+    publish_channel = (
+        publish_channel
+        and settings["post_to_channel"]
+    )
+
+    if not publish_admin and not publish_channel:
+        raise RuntimeError(
+            "Publishing is disabled for both admin and channel"
+        )
 
     state_key = None
     state = None
@@ -446,6 +514,9 @@ async def send_article(
             article["hero_image"]
         )
 
+    admin_reply_id = None
+
+    if publish_admin and image_data:
         if track_progress:
             admin_reply_id = await _send_tracked_photo(
                 env,
@@ -473,9 +544,6 @@ async def send_article(
                 admin_photo["result"]["message_id"]
             )
 
-    else:
-        admin_reply_id = None
-
     if publish_channel:
         await send_channel_article(
             env,
@@ -488,12 +556,13 @@ async def send_article(
             state,
         )
 
-    await send_rich_message(
-        env,
-        chat_id,
-        rich_html,
-        admin_reply_id,
-    )
+    if publish_admin:
+        await send_rich_message(
+            env,
+            chat_id,
+            rich_html,
+            admin_reply_id,
+        )
 
     print(
         f"Article processing completed | "
