@@ -272,17 +272,24 @@ async def _send_tracked_photo(
     if previous:
         previous_status = previous.get("status")
 
-        if previous_status in (
-            "sent",
-            "uncertain",
-            "sending",
-        ):
+        if previous_status == "sent":
             print(
                 f"Skipping photo | Stage={stage} | "
-                f"State={previous_status}"
+                f"State=sent"
             )
 
             return previous.get("message_id")
+
+        if previous_status in (
+            "uncertain",
+            "sending",
+        ):
+            raise RuntimeError(
+                f"Photo delivery is {previous_status} "
+                f"for stage={stage}. "
+                "Refusing to publish the article without "
+                "a confirmed hero photo."
+            )
 
     state[stage] = {
         "status": "sending",
