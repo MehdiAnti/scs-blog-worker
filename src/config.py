@@ -26,18 +26,18 @@ def get_bot_token(env):
     return token
 
 
-def get_allowed_users(env):
+def _parse_allowed_users(env):
     value = getattr(env, "ALLOWED_USER", None)
 
     if not value:
         raise RuntimeError("ALLOWED_USER is not configured")
 
     try:
-        users = {
+        users = [
             int(user_id.strip())
             for user_id in str(value).split(",")
             if user_id.strip()
-        }
+        ]
 
     except ValueError:
         raise RuntimeError(
@@ -50,6 +50,14 @@ def get_allowed_users(env):
         )
 
     return users
+
+
+def get_allowed_users(env):
+    return set(_parse_allowed_users(env))
+
+
+def get_allowed_user(env):
+    return _parse_allowed_users(env)[0]
 
 
 def get_channel_id(env):
