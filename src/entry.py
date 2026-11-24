@@ -13,7 +13,7 @@ from commands import (
 )
 
 from config import (
-    get_allowed_user,
+    get_allowed_users,
 )
 
 
@@ -126,15 +126,15 @@ class Default(WorkerEntrypoint):
             callback_chat_id = callback_chat.get("id")
 
             try:
-                allowed_user = get_allowed_user(
+                allowed_users = get_allowed_users(
                     self.env
                 )
 
                 if (
                     int(callback_user.get("id", 0))
-                    != allowed_user
+                    not in allowed_users
                     or int(callback_chat_id or 0)
-                    != allowed_user
+                    not in allowed_users
                 ):
                     return Response.json(
                         {
@@ -189,7 +189,7 @@ class Default(WorkerEntrypoint):
         try:
             if (
                 int(chat_id)
-                != get_allowed_user(self.env)
+                not in get_allowed_users(self.env)
             ):
                 return Response.json(
                     {
