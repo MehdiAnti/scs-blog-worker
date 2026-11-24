@@ -26,13 +26,30 @@ def get_bot_token(env):
     return token
 
 
-def get_allowed_user(env):
+def get_allowed_users(env):
     value = getattr(env, "ALLOWED_USER", None)
 
-    if value is None:
+    if not value:
         raise RuntimeError("ALLOWED_USER is not configured")
 
-    return int(value)
+    try:
+        users = {
+            int(user_id.strip())
+            for user_id in str(value).split(",")
+            if user_id.strip()
+        }
+
+    except ValueError:
+        raise RuntimeError(
+            "ALLOWED_USER must contain valid numeric IDs separated by commas"
+        )
+
+    if not users or any(user_id <= 0 for user_id in users):
+        raise RuntimeError(
+            "ALLOWED_USER must contain valid positive Telegram user IDs"
+        )
+
+    return users
 
 
 def get_channel_id(env):
