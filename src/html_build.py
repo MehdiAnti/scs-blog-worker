@@ -96,7 +96,6 @@ def _is_safe_url(url):
     if not parsed.netloc:
         return False
 
-    
     if "@" in parsed.netloc:
         return False
 
@@ -204,6 +203,7 @@ def _create_inline_button(
 
     return button
 
+
 def _convert_iframes(soup):
 
     for iframe in soup.find_all("iframe"):
@@ -289,6 +289,10 @@ def _convert_iframes(soup):
             iframe.decompose()
             continue
 
+        if button is None:
+            iframe.decompose()
+            continue
+
         iframe.replace_with(
             button
         )
@@ -343,6 +347,10 @@ def _cleanup_images_and_links(soup):
                 style="primary",
             )
 
+            if button is None:
+                img.decompose()
+                continue
+
             parent = img.parent
 
             if (
@@ -393,6 +401,10 @@ def _cleanup_images_and_links(soup):
             text,
             href,
         )
+
+        if button is None:
+            link.unwrap()
+            continue
 
         link.replace_with(
             button
