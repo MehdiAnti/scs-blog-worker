@@ -243,11 +243,14 @@ async def cmd_last(
         env
     )
 
+    title = html.escape(str(article.get("title", "")))
+    url = html.escape(str(article.get("url", "")))
+
     text = (
         f"Title:\n"
-        f"{article.get('title', '')}\n\n"
+        f"{title}\n\n"
         f"URL:\n"
-        f"{article.get('url', '')}"
+        f"{url}"
     )
 
     await send_message(
@@ -265,17 +268,23 @@ async def cmd_status(
         env
     )
 
+    last_result = html.escape(str(status["last_result"]))
+    last_check = html.escape(str(status["last_check"]))
+    latest_title = html.escape(str(status["latest_title"]))
+    latest_url = html.escape(str(status["latest_url"]))
+    last_error = html.escape(str(status["last_error"] or "None"))
+
     text = (
         "<b>📊 Bot Status</b>\n\n"
         f"<b>Last Result:</b> "
-        f"{status['last_result']}\n"
+        f"{last_result}\n"
         f"<b>Last Check:</b> "
-        f"{status['last_check']}\n\n"
+        f"{last_check}\n\n"
         f"<b>Latest Article:</b>\n"
-        f"{status['latest_title']}\n"
-        f"{status['latest_url']}\n\n"
+        f"{latest_title}\n"
+        f"{latest_url}\n\n"
         f"<b>Last Error:</b>\n"
-        f"{status['last_error'] or 'None'}"
+        f"{last_error}"
     )
 
     await send_message(
@@ -339,7 +348,7 @@ async def cmd_rich(
         await send_message(
             env,
             chat_id,
-            f"❌ {e}",
+            f"❌ {html.escape(str(e))}",
         )
 
 
@@ -444,7 +453,7 @@ async def cmd_publish(
         chat_id,
         (
             f"{success_text}\n\n"
-            f"{article['title']}"
+            f"{html.escape(str(article['title']))}"
         ),
     )
 
@@ -480,7 +489,7 @@ async def cmd_checknow(
             chat_id,
             (
                 "✅ Published successfully.\n\n"
-                f"{result['title']}"
+                f"{html.escape(str(result['title']))}"
             ),
         )
 
@@ -488,7 +497,7 @@ async def cmd_checknow(
         await send_message(
             env,
             chat_id,
-            f"❌ {e}",
+            f"❌ {html.escape(str(e))}",
         )
 
 
