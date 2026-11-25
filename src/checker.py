@@ -25,6 +25,55 @@ from config import (
 )
 
 
+async def save_processed_article(
+    env,
+    article,
+    state_url=None,
+    status=None,
+):
+    if status is None:
+        status = await get_status(
+            env
+        )
+
+        status["last_check"] = (
+            datetime.now(
+                timezone.utc
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
+        )
+
+    await save_detected(
+        env,
+        article["url"],
+        article["title"],
+    )
+
+    await clear_publish_state(
+        env,
+        state_url or article["url"],
+    )
+
+    status["last_result"] = "posted"
+    status["latest_title"] = (
+        article["title"]
+    )
+    status["latest_url"] = (
+        article["url"]
+    )
+    status["last_error"] = ""
+
+    await save_status(
+        env,
+        status,
+    )
+
+    print(
+        "Article saved as successfully processed"
+    )
+
+
 async def run_check(env):
     print("Check started")
 
@@ -120,33 +169,11 @@ async def run_check(env):
             "Telegram publishing completed"
         )
 
-        await save_detected(
+        await save_processed_article(
             env,
-            article["url"],
-            article["title"],
-        )
-
-        await clear_publish_state(
-            env,
-            article["url"],
-        )
-
-        print(
-            "Article saved to detected storage"
-        )
-
-        status["last_result"] = "posted"
-        status["latest_title"] = (
-            article["title"]
-        )
-        status["latest_url"] = (
-            article["url"]
-        )
-        status["last_error"] = ""
-
-        await save_status(
-            env,
-            status,
+            article,
+            state_url=latest["url"],
+            status=status,
         )
 
         print("Check completed successfully")
