@@ -1,3 +1,4 @@
+import html
 import re
 
 from urllib.parse import urlparse
@@ -563,10 +564,10 @@ def build_preview(
 ):
 
     return (
-        f"<b>{title}</b>\n\n"
-        f"{teaser}\n\n"
-        f"🔗 {article_url}\n\n"
-        f"🐳\n"
+        f"<b>{html.escape(str(title))}</b>\n\n"
+        f"{html.escape(str(teaser))}\n\n"
+        f"🔗 {html.escape(str(article_url))}\n\n"
+        f"#Blog 🐳\n"
         f"Join: @SCSSoftwareFeed"
     )
 
