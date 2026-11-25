@@ -7,7 +7,6 @@ from config import (
 from storage import (
     get_last_article,
     get_status,
-    save_detected,
     get_publish_settings,
     save_publish_settings,
 )
@@ -29,6 +28,7 @@ from html_build import (
 
 from checker import (
     run_check,
+    save_processed_article,
 )
 
 
@@ -41,7 +41,7 @@ MAIN_MENU_TEXT = (
     "/settings - Publishing settings\n"
     "/rich URL - Debug cleaned HTML\n"
     "/preview URL - Preview article\n"
-    "/publish URL - Publish article"
+    "/publish URL [-f] - Publish article"
 )
 
 
@@ -377,18 +377,32 @@ async def cmd_publish(
     chat_id,
     text,
 ):
-    parts = text.split(
-        " ",
-        1,
-    )
+    parts = text.split()
 
-    if len(parts) != 2:
+    if (
+        len(parts) not in (2, 3)
+        or (
+            len(parts) == 3
+            and parts[2] != "-f"
+        )
+    ):
         await send_message(
             env,
             chat_id,
-            "Usage:\n/publish ARTICLE_URL",
+            (
+                "Usage:\n"
+                "/publish ARTICLE_URL\n"
+                "/publish ARTICLE_URL -f"
+            ),
         )
         return
+
+    article_url = parts[1]
+
+    force = (
+        len(parts) == 3
+        and parts[2] == "-f"
+    )
 
     settings = await get_publish_settings(env)
 
@@ -404,26 +418,32 @@ async def cmd_publish(
         )
         return
 
-    article_url = parts[1].strip()
-
     article = await send_article(
         env,
         chat_id,
         article_url,
         publish_channel=True,
+        track_progress=force,
     )
 
-    await save_detected(
-        env,
-        article["url"],
-        article["title"],
+    if force:
+        await save_processed_article(
+            env,
+            article,
+            state_url=article_url,
+        )
+
+    success_text = (
+        "✅ Published and saved as processed."
+        if force
+        else "✅ Published."
     )
 
     await send_message(
         env,
         chat_id,
         (
-            "✅ Published.\n\n"
+            f"{success_text}\n\n"
             f"{article['title']}"
         ),
     )
